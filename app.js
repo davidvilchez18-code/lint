@@ -1,373 +1,729 @@
-class FlashlightApp {
+class WhatsAppChat {
     constructor() {
-        this.isOn = false;
-        this.strobeInterval = null;
-        this.sosInterval = null;
-        this.currentStream = null;
-        this.brightness = 1.0;
+        this.currentUser = null;
+        this.currentChat = null;
+        this.users = new Map();
+        this.chats = new Map();
+        this.messagesListener = null;
+        this.chatsListener = null;
         
         this.init();
     }
     
     async init() {
-        // Referencias a elementos del DOM
-        this.torchButton = document.getElementById('torchButton');
-        this.flashlightArea = document.getElementById('flashlightArea');
-        this.statusText = document.getElementById('statusText');
-        this.permissionAlert = document.getElementById('permissionAlert');
-        this.requestPermissionBtn = document.getElementById('requestPermissionBtn');
-        this.strobeButton = document.getElementById('strobeButton');
-        this.morseButton = document.getElementById('morseButton');
-        this.brightnessButton = document.getElementById('brightnessButton');
-        this.sosButton = document.getElementById('sosButton');
-        this.batteryIndicator = document.getElementById('batteryIndicator');
-        this.batteryLevel = document.getElementById('batteryLevel');
+        // Referencias a elementos DOM
+        this.setupDOMReferences();
         
-        // Event listeners
-        this.torchButton.addEventListener('click', () => this.toggleFlashlight());
-        this.requestPermissionBtn.addEventListener('click', () => this.requestPermission());
-        this.strobeButton.addEventListener('click', () => this.toggleStrobe());
-        this.morseButton.addEventListener('click', () => this.toggleSOS());
-        this.brightnessButton.addEventListener('click', () => this.adjustBrightness());
-        this.sosButton.addEventListener('click', () => this.emergencySOS());
+        // Event Listeners
+        this.setupEventListeners();
         
-        // Detectar cambios de batería
-        if ('getBattery' in navigator) {
-            this.initBatteryMonitor();
-        }
+        // Verificar autenticación
+        this.checkAuth();
         
-        // Verificar si ya tenemos permisos
-        this.checkPermission();
-        
-        // Configurar PWA
-        this.setupPWA();
+        // Cargar emojis
+        this.loadEmojis();
     }
     
-    async checkPermission() {
-        try {
-            // Intentar acceder a la cámara para verificar permisos
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: { exact: "environment" } }
+    setupDOMReferences() {
+        // Pantallas
+        this.authScreen = document.getElementById('authScreen');
+        this.chatScreen = document.getElementById('chatScreen');
+        
+        // Auth elements
+        this.displayNameInput = document.getElementById('displayName');
+        this.phoneNumberInput = document.getElementById('phoneNumber');
+        this.profilePhotoInput = document.getElementById('profilePhoto');
+        this.uploadPhotoBtn = document.getElementById('uploadPhotoBtn');
+        this.signInBtn = document.getElementById('signInBtn');
+        this.demoButtons = document.querySelectorAll('.demo-btn');
+        
+        // Chat elements
+        this.chatsContainer = document.getElementById('chatsContainer');
+        this.messagesContainer = document.getElementById('messagesContainer');
+        this.messageInput = document.getElementById('messageInput');
+        this.sendBtn = document.getElementById('sendBtn');
+        this.searchChatsInput = document.getElementById('searchChats');
+        
+        // Modals
+        this.newChatModal = document.getElementById('newChatModal');
+        this.profileModal = document.getElementById('profileModal');
+        
+        // Buttons
+        this.startNewChatBtn = document.getElementById('startNewChatBtn');
+        this.menuBtn = document.getElementById('menuBtn');
+        this.backBtn = document.getElementById('backBtn');
+        this.logoutBtn = document.getElementById('logoutBtn');
+        
+        // User info
+        this.userAvatar = document.getElementById('userAvatar');
+        this.currentUserName = document.getElementById('currentUserName');
+    }
+    
+    setupEventListeners() {
+        // Autenticación
+        this.signInBtn.addEventListener('click', () => this.signIn());
+        this.uploadPhotoBtn.addEventListener('click', () => this.profilePhotoInput.click());
+        this.profilePhotoInput.addEventListener('change', (e) => this.previewProfilePhoto(e));
+        
+        // Demo users
+        this.demoButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const userName = e.target.dataset.user;
+                this.useDemoUser(userName);
             });
-            
-            // Si tenemos acceso, ocultar alerta y detener stream
-            this.permissionAlert.classList.add('hidden');
-            stream.getTracks().forEach(track => track.stop());
-            this.currentStream = null;
-        } catch (error) {
-            console.log('Permiso no concedido o dispositivo no compatible');
-            this.permissionAlert.classList.remove('hidden');
-        }
+        });
+        
+        // Chat
+        this.sendBtn.addEventListener('click', () => this.sendMessage());
+        this.messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                this.sendMessage();
+            }
+        });
+        
+        // Nuevo chat
+        this.startNewChatBtn.addEventListener('click', () => this.showNewChatModal());
+        this.menuBtn.addEventListener('click', () => this.showProfileModal());
+        this.backBtn.addEventListener('click', () => this.logout());
+        
+        // Buscar chats
+        this.searchChatsInput.addEventListener('input', (e) => this.searchChats(e.target.value));
+        
+        // Logout
+        this.logoutBtn.addEventListener('click', () => this.logout());
+        
+        // Notificaciones
+        this.setupNotifications();
     }
     
-    async requestPermission() {
-        try {
-            // Solicitar permiso para cámara trasera (requerido para linterna en iOS)
-            this.currentStream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: { exact: "environment" } }
-            });
-            
-            this.permissionAlert.classList.add('hidden');
-            console.log('Permiso concedido para linterna');
-            
-            // Apagar la linterna inicialmente
-            await this.turnOff();
-            
-        } catch (error) {
-            console.error('Error al solicitar permiso:', error);
-            alert('Se requiere acceso a la cámara para usar la linterna. Por favor, permite el acceso en la configuración de tu dispositivo.');
-        }
+    async checkAuth() {
+        // Escuchar cambios de autenticación
+        firebaseApp.auth.onAuthStateChanged(async (user) => {
+            if (user) {
+                this.currentUser = user;
+                await this.loadUserData(user.uid);
+                this.showChatScreen();
+                this.listenForChats();
+            } else {
+                this.showAuthScreen();
+            }
+        });
     }
     
-    async toggleFlashlight() {
-        if (!this.currentStream) {
-            await this.requestPermission();
+    async signIn() {
+        const displayName = this.displayNameInput.value.trim();
+        const phoneNumber = this.phoneNumberInput.value.trim();
+        const photoFile = this.profilePhotoInput.files[0];
+        
+        if (!displayName || !phoneNumber) {
+            this.showToast('Por favor completa todos los campos');
             return;
         }
         
-        if (this.isOn) {
-            await this.turnOff();
-        } else {
-            await this.turnOn();
-        }
-    }
-    
-    async turnOn() {
         try {
-            if (!this.currentStream) return;
+            // Crear usuario anónimo (para demo)
+            const userCredential = await firebaseApp.auth.signInAnonymously();
+            const user = userCredential.user;
             
-            // En iOS/Safari, encender la linterna usando los tracks de video
-            const track = this.currentStream.getVideoTracks()[0];
-            
-            // Intentar aplicar configuración de linterna
-            await track.applyConstraints({
-                advanced: [{ torch: true }]
-            });
-            
-            this.isOn = true;
-            this.updateUI();
-            console.log('Linterna ENCENDIDA');
-            
-        } catch (error) {
-            console.error('Error al encender linterna:', error);
-            
-            // Fallback para dispositivos que no soportan linterna
-            this.useScreenAsFlashlight();
-        }
-    }
-    
-    async turnOff() {
-        try {
-            if (!this.currentStream) return;
-            
-            const track = this.currentStream.getVideoTracks()[0];
-            
-            // Apagar linterna
-            await track.applyConstraints({
-                advanced: [{ torch: false }]
-            });
-            
-            this.isOn = false;
-            this.updateUI();
-            console.log('Linterna APAGADA');
-            
-        } catch (error) {
-            console.error('Error al apagar linterna:', error);
-            
-            // Fallback: apagar pantalla blanca
-            this.flashlightArea.classList.remove('flashlight-on');
-            this.flashlightArea.classList.add('flashlight-off');
-        }
-    }
-    
-    useScreenAsFlashlight() {
-        // Fallback: usar la pantalla como linterna
-        this.isOn = true;
-        this.flashlightArea.classList.remove('flashlight-off');
-        this.flashlightArea.classList.add('flashlight-on');
-        this.updateUI();
-    }
-    
-    updateUI() {
-        if (this.isOn) {
-            this.torchButton.classList.add('on');
-            this.statusText.textContent = 'ENCENDIDO';
-            this.flashlightArea.classList.remove('flashlight-off');
-            this.flashlightArea.classList.add('flashlight-on');
-        } else {
-            this.torchButton.classList.remove('on');
-            this.statusText.textContent = 'APAGADO';
-            this.flashlightArea.classList.remove('flashlight-on');
-            this.flashlightArea.classList.add('flashlight-off');
-        }
-    }
-    
-    toggleStrobe() {
-        if (this.strobeInterval) {
-            clearInterval(this.strobeInterval);
-            this.strobeInterval = null;
-            this.strobeButton.innerHTML = '<i class="fas fa-bolt"></i><span>Strobe</span>';
-        } else {
-            this.strobeInterval = setInterval(() => {
-                if (this.isOn) {
-                    this.turnOff();
-                } else {
-                    this.turnOn();
-                }
-            }, 200); // 5Hz strobe
-            this.strobeButton.innerHTML = '<i class="fas fa-stop"></i><span>Detener</span>';
-        }
-    }
-    
-    toggleSOS() {
-        if (this.sosInterval) {
-            clearInterval(this.sosInterval);
-            this.sosInterval = null;
-            this.morseButton.innerHTML = '<i class="fas fa-code"></i><span>SOS</span>';
-            this.sosButton.classList.remove('sos-active');
-        } else {
-            this.playSOS();
-            this.morseButton.innerHTML = '<i class="fas fa-stop"></i><span>Detener</span>';
-            this.sosButton.classList.add('sos-active');
-        }
-    }
-    
-    playSOS() {
-        const sosPattern = [
-            { on: true, duration: 200 },  // S .
-            { on: false, duration: 200 },
-            { on: true, duration: 200 },  // S .
-            { on: false, duration: 200 },
-            { on: true, duration: 200 },  // S .
-            { on: false, duration: 400 },
-            
-            { on: true, duration: 600 },  // O -
-            { on: false, duration: 200 },
-            { on: true, duration: 600 },  // O -
-            { on: false, duration: 200 },
-            { on: true, duration: 600 },  // O -
-            { on: false, duration: 400 },
-            
-            { on: true, duration: 200 },  // S .
-            { on: false, duration: 200 },
-            { on: true, duration: 200 },  // S .
-            { on: false, duration: 200 },
-            { on: true, duration: 200 },  // S .
-            { on: false, duration: 1000 } // Pausa larga
-        ];
-        
-        let step = 0;
-        
-        const playStep = async () => {
-            if (step >= sosPattern.length) {
-                step = 0; // Repetir
+            // Subir foto si existe
+            let photoURL = '';
+            if (photoFile) {
+                photoURL = await this.uploadProfilePhoto(photoFile, user.uid);
             }
             
-            const pattern = sosPattern[step];
+            // Guardar datos del usuario en Firestore
+            await firebaseApp.db.collection('users').doc(user.uid).set({
+                uid: user.uid,
+                displayName: displayName,
+                phoneNumber: phoneNumber,
+                photoURL: photoURL,
+                status: 'En línea',
+                lastSeen: firebaseApp.timestamp(),
+                createdAt: firebaseApp.timestamp()
+            }, { merge: true });
             
-            if (pattern.on && !this.isOn) {
-                await this.turnOn();
-            } else if (!pattern.on && this.isOn) {
-                await this.turnOff();
-            }
+            this.showToast('¡Bienvenido!');
             
-            step++;
-            this.sosInterval = setTimeout(playStep, pattern.duration);
+        } catch (error) {
+            console.error('Error al iniciar sesión:', error);
+            this.showToast('Error al iniciar sesión: ' + error.message);
+        }
+    }
+    
+    useDemoUser(userName) {
+        // Datos de usuarios demo
+        const demoUsers = {
+            'Ana': { phone: '5550101', photo: '👩' },
+            'Carlos': { phone: '5550102', photo: '👨' },
+            'Maria': { phone: '5550103', photo: '👩' },
+            'Juan': { phone: '5550104', photo: '👨' }
         };
         
-        playStep();
-    }
-    
-    emergencySOS() {
-        if (!this.sosInterval) {
-            this.toggleSOS();
-        } else {
-            this.toggleSOS();
+        const user = demoUsers[userName];
+        if (user) {
+            this.displayNameInput.value = userName;
+            this.phoneNumberInput.value = user.phone;
+            this.showToast(`Usando cuenta demo: ${userName}`);
         }
     }
     
-    adjustBrightness() {
-        // En navegadores web, el brillo es limitado
-        // Esta función es más útil en apps nativas
-        const brightnessLevels = [0.25, 0.5, 0.75, 1.0];
-        const currentIndex = brightnessLevels.indexOf(this.brightness);
-        const nextIndex = (currentIndex + 1) % brightnessLevels.length;
-        
-        this.brightness = brightnessLevels[nextIndex];
-        
-        // Aplicar brillo visual (solo efecto en pantalla)
-        this.flashlightArea.style.opacity = this.brightness;
-        
-        // Mostrar notificación
-        const levelsText = ['Bajo', 'Medio', 'Alto', 'Máximo'];
-        alert(`Brillo ajustado a: ${levelsText[nextIndex]}`);
-    }
-    
-    async initBatteryMonitor() {
+    async uploadProfilePhoto(file, userId) {
         try {
-            const battery = await navigator.getBattery();
+            const storageRef = firebaseApp.storage.ref();
+            const photoRef = storageRef.child(`profile_photos/${userId}_${Date.now()}`);
             
-            const updateBatteryLevel = () => {
-                const level = Math.round(battery.level * 100);
-                this.batteryLevel.textContent = `${level}%`;
-                
-                // Cambiar icono según nivel
-                const batteryIcon = this.batteryIndicator.querySelector('i');
-                let iconClass = 'fa-battery-full';
-                
-                if (level <= 20) iconClass = 'fa-battery-empty';
-                else if (level <= 40) iconClass = 'fa-battery-quarter';
-                else if (level <= 60) iconClass = 'fa-battery-half';
-                else if (level <= 80) iconClass = 'fa-battery-three-quarters';
-                
-                batteryIcon.className = `fas ${iconClass}`;
-                
-                // Advertencia si la batería es baja
-                if (level <= 15 && this.isOn) {
-                    this.batteryIndicator.style.color = '#ff3b30';
-                    this.showLowBatteryWarning();
-                } else {
-                    this.batteryIndicator.style.color = level > 50 ? '#4cd964' : '#ffcc00';
-                }
-            };
+            // Subir archivo
+            await photoRef.put(file);
             
-            battery.addEventListener('levelchange', updateBatteryLevel);
-            battery.addEventListener('chargingchange', updateBatteryLevel);
-            
-            updateBatteryLevel();
+            // Obtener URL de descarga
+            const downloadURL = await photoRef.getDownloadURL();
+            return downloadURL;
             
         } catch (error) {
-            console.log('API de batería no soportada');
-            this.batteryIndicator.style.display = 'none';
+            console.error('Error subiendo foto:', error);
+            return '';
         }
     }
     
-    showLowBatteryWarning() {
-        if (!this.lowBatteryWarningShown) {
-            alert('⚠️ Batería baja. La linterna puede apagarse pronto.');
-            this.lowBatteryWarningShown = true;
+    previewProfilePhoto(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const preview = document.getElementById('photoPreview');
+            preview.innerHTML = `<img src="${e.target.result}" alt="Preview">`;
+        };
+        reader.readAsDataURL(file);
+    }
+    
+    async loadUserData(userId) {
+        try {
+            const userDoc = await firebaseApp.db.collection('users').doc(userId).get();
             
-            setTimeout(() => {
-                this.lowBatteryWarningShown = false;
-            }, 30000);
+            if (userDoc.exists) {
+                const userData = userDoc.data();
+                
+                // Actualizar UI
+                this.currentUserName.textContent = userData.displayName;
+                
+                if (userData.photoURL) {
+                    this.userAvatar.innerHTML = `<img src="${userData.photoURL}" alt="${userData.displayName}">`;
+                } else {
+                    this.userAvatar.innerHTML = `<span>${userData.displayName.charAt(0)}</span>`;
+                }
+                
+                // Actualizar estado como en línea
+                await firebaseApp.db.collection('users').doc(userId).update({
+                    status: 'En línea',
+                    lastSeen: firebaseApp.timestamp()
+                });
+            }
+        } catch (error) {
+            console.error('Error cargando datos:', error);
         }
     }
     
-    setupPWA() {
-        // Registrar service worker si está soportado
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('sw.js')
-                    .then(registration => {
-                        console.log('ServiceWorker registrado:', registration.scope);
-                    })
-                    .catch(error => {
-                        console.log('Error al registrar ServiceWorker:', error);
-                    });
+    showAuthScreen() {
+        this.authScreen.classList.add('active');
+        this.chatScreen.classList.remove('active');
+    }
+    
+    showChatScreen() {
+        this.authScreen.classList.remove('active');
+        this.chatScreen.classList.add('active');
+    }
+    
+    async listenForChats() {
+        if (!this.currentUser) return;
+        
+        // Escuchar chats del usuario actual
+        this.chatsListener = firebaseApp.db.collection('chats')
+            .where('participants', 'array-contains', this.currentUser.uid)
+            .orderBy('lastMessageAt', 'desc')
+            .onSnapshot(async (snapshot) => {
+                this.chatsContainer.innerHTML = '';
+                
+                if (snapshot.empty) {
+                    document.getElementById('noChats').classList.remove('hidden');
+                    return;
+                }
+                
+                document.getElementById('noChats').classList.add('hidden');
+                
+                for (const doc of snapshot.docs) {
+                    await this.renderChatItem(doc.data(), doc.id);
+                }
+            });
+    }
+    
+    async renderChatItem(chatData, chatId) {
+        // Obtener información del otro participante
+        const otherUserId = chatData.participants.find(id => id !== this.currentUser.uid);
+        const otherUser = await this.getUserData(otherUserId);
+        
+        if (!otherUser) return;
+        
+        const chatItem = document.createElement('div');
+        chatItem.className = 'chat-item';
+        chatItem.dataset.chatId = chatId;
+        
+        const lastMessage = chatData.lastMessage || 'No hay mensajes';
+        const timestamp = chatData.lastMessageAt ? this.formatTime(chatData.lastMessageAt.toDate()) : '';
+        
+        chatItem.innerHTML = `
+            <div class="chat-avatar">
+                ${otherUser.photoURL ? 
+                    `<img src="${otherUser.photoURL}" alt="${otherUser.displayName}">` : 
+                    `<span>${otherUser.displayName.charAt(0)}</span>`}
+                <div class="status-indicator ${otherUser.status === 'En línea' ? 'online' : 'offline'}"></div>
+            </div>
+            <div class="chat-info">
+                <div class="chat-header">
+                    <h4>${otherUser.displayName}</h4>
+                    <span class="chat-time">${timestamp}</span>
+                </div>
+                <p class="chat-preview">${lastMessage}</p>
+                ${chatData.unreadCount > 0 ? 
+                    `<span class="unread-badge">${chatData.unreadCount}</span>` : ''}
+            </div>
+        `;
+        
+        chatItem.addEventListener('click', () => this.openChat(chatId, otherUser));
+        this.chatsContainer.appendChild(chatItem);
+    }
+    
+    async openChat(chatId, otherUser) {
+        this.currentChat = chatId;
+        
+        // Mostrar pantalla de chat
+        document.getElementById('chatsList').classList.add('hidden');
+        document.getElementById('chatWindow').classList.remove('hidden');
+        
+        // Actualizar información del contacto
+        document.getElementById('chatUserName').textContent = otherUser.displayName;
+        document.getElementById('chatUserStatus').textContent = otherUser.status;
+        
+        if (otherUser.photoURL) {
+            document.getElementById('chatUserAvatar').innerHTML = 
+                `<img src="${otherUser.photoURL}" alt="${otherUser.displayName}">`;
+        }
+        
+        // Cargar mensajes
+        await this.loadMessages(chatId);
+        
+        // Escuchar nuevos mensajes en tiempo real
+        this.listenToMessages(chatId);
+        
+        // Marcar como leído
+        await this.markAsRead(chatId);
+    }
+    
+    async loadMessages(chatId) {
+        const messagesContainer = document.getElementById('messagesContainer');
+        messagesContainer.innerHTML = '<div class="message-date"><span>HOY</span></div>';
+        
+        try {
+            const messagesSnapshot = await firebaseApp.db.collection('chats')
+                .doc(chatId)
+                .collection('messages')
+                .orderBy('timestamp', 'asc')
+                .limit(50)
+                .get();
+            
+            messagesSnapshot.forEach(doc => {
+                this.renderMessage(doc.data(), doc.id);
+            });
+            
+            // Scroll al final
+            this.scrollToBottom();
+            
+        } catch (error) {
+            console.error('Error cargando mensajes:', error);
+        }
+    }
+    
+    listenToMessages(chatId) {
+        // Detener listener anterior
+        if (this.messagesListener) {
+            this.messagesListener();
+        }
+        
+        // Nuevo listener en tiempo real
+        this.messagesListener = firebaseApp.db.collection('chats')
+            .doc(chatId)
+            .collection('messages')
+            .orderBy('timestamp', 'asc')
+            .onSnapshot((snapshot) => {
+                snapshot.docChanges().forEach((change) => {
+                    if (change.type === 'added') {
+                        this.renderMessage(change.doc.data(), change.doc.id);
+                        this.scrollToBottom();
+                        
+                        // Mostrar notificación si no está en este chat
+                        if (this.currentChat !== chatId) {
+                            this.showMessageNotification(change.doc.data());
+                        }
+                    }
+                });
+            });
+    }
+    
+    renderMessage(message, messageId) {
+        const messagesContainer = document.getElementById('messagesContainer');
+        const isCurrentUser = message.senderId === this.currentUser.uid;
+        
+        const messageElement = document.createElement('div');
+        messageElement.className = `message ${isCurrentUser ? 'sent' : 'received'}`;
+        messageElement.dataset.messageId = messageId;
+        
+        let content = '';
+        
+        switch (message.type) {
+            case 'text':
+                content = `<p>${this.formatMessageText(message.content)}</p>`;
+                break;
+                
+            case 'image':
+                content = `
+                    <div class="message-image">
+                        <img src="${message.content}" alt="Imagen" loading="lazy">
+                    </div>
+                `;
+                break;
+                
+            case 'audio':
+                content = `
+                    <div class="message-audio">
+                        <audio controls>
+                            <source src="${message.content}" type="audio/mpeg">
+                        </audio>
+                        <span>${message.duration || 'Audio'}</span>
+                    </div>
+                `;
+                break;
+                
+            default:
+                content = `<p>${message.content}</p>`;
+        }
+        
+        const time = message.timestamp ? this.formatTime(message.timestamp.toDate()) : 'Ahora';
+        
+        messageElement.innerHTML = `
+            <div class="message-content">
+                ${content}
+                <span class="message-time">${time}</span>
+            </div>
+        `;
+        
+        messagesContainer.appendChild(messageElement);
+    }
+    
+    async sendMessage() {
+        const messageText = this.messageInput.value.trim();
+        if (!messageText || !this.currentChat) return;
+        
+        try {
+            // Crear objeto de mensaje
+            const message = {
+                content: messageText,
+                senderId: this.currentUser.uid,
+                type: 'text',
+                timestamp: firebaseApp.timestamp(),
+                read: false
+            };
+            
+            // Agregar mensaje a la subcolección
+            await firebaseApp.db.collection('chats')
+                .doc(this.currentChat)
+                .collection('messages')
+                .add(message);
+            
+            // Actualizar último mensaje en el chat
+            await firebaseApp.db.collection('chats')
+                .doc(this.currentChat)
+                .update({
+                    lastMessage: messageText,
+                    lastMessageAt: firebaseApp.timestamp(),
+                    unreadCount: firebaseApp.firestore.FieldValue.increment(1)
+                });
+            
+            // Limpiar input
+            this.messageInput.value = '';
+            
+        } catch (error) {
+            console.error('Error enviando mensaje:', error);
+            this.showToast('Error enviando mensaje');
+        }
+    }
+    
+    async showNewChatModal() {
+        this.newChatModal.classList.remove('hidden');
+        
+        try {
+            // Cargar todos los usuarios excepto el actual
+            const usersSnapshot = await firebaseApp.db.collection('users')
+                .where('uid', '!=', this.currentUser.uid)
+                .limit(20)
+                .get();
+            
+            const usersList = document.getElementById('usersList');
+            usersList.innerHTML = '';
+            
+            usersSnapshot.forEach(doc => {
+                const user = doc.data();
+                const userElement = document.createElement('div');
+                userElement.className = 'user-item';
+                userElement.innerHTML = `
+                    <div class="user-avatar">
+                        ${user.photoURL ? 
+                            `<img src="${user.photoURL}" alt="${user.displayName}">` : 
+                            `<span>${user.displayName.charAt(0)}</span>`}
+                    </div>
+                    <div class="user-info">
+                        <h4>${user.displayName}</h4>
+                        <p>${user.status || 'Disponible'}</p>
+                    </div>
+                    <button class="start-chat-btn" data-user-id="${user.uid}">
+                        <i class="fas fa-comment"></i>
+                    </button>
+                `;
+                
+                userElement.querySelector('.start-chat-btn').addEventListener('click', 
+                    () => this.startNewChat(user.uid));
+                
+                usersList.appendChild(userElement);
+            });
+            
+        } catch (error) {
+            console.error('Error cargando usuarios:', error);
+        }
+    }
+    
+    async startNewChat(otherUserId) {
+        try {
+            // Verificar si ya existe un chat
+            const existingChat = await this.findExistingChat(otherUserId);
+            
+            if (existingChat) {
+                this.openChat(existingChat.id, await this.getUserData(otherUserId));
+            } else {
+                // Crear nuevo chat
+                const chatData = {
+                    participants: [this.currentUser.uid, otherUserId],
+                    createdAt: firebaseApp.timestamp(),
+                    lastMessageAt: firebaseApp.timestamp(),
+                    lastMessage: '',
+                    unreadCount: 0
+                };
+                
+                const chatRef = await firebaseApp.db.collection('chats').add(chatData);
+                this.openChat(chatRef.id, await this.getUserData(otherUserId));
+            }
+            
+            this.newChatModal.classList.add('hidden');
+            
+        } catch (error) {
+            console.error('Error creando chat:', error);
+            this.showToast('Error creando chat');
+        }
+    }
+    
+    async findExistingChat(otherUserId) {
+        const snapshot = await firebaseApp.db.collection('chats')
+            .where('participants', 'array-contains', this.currentUser.uid)
+            .get();
+        
+        for (const doc of snapshot.docs) {
+            const chatData = doc.data();
+            if (chatData.participants.includes(otherUserId)) {
+                return { id: doc.id, ...chatData };
+            }
+        }
+        
+        return null;
+    }
+    
+    async getUserData(userId) {
+        if (this.users.has(userId)) {
+            return this.users.get(userId);
+        }
+        
+        try {
+            const userDoc = await firebaseApp.db.collection('users').doc(userId).get();
+            
+            if (userDoc.exists) {
+                const userData = userDoc.data();
+                this.users.set(userId, userData);
+                return userData;
+            }
+        } catch (error) {
+            console.error('Error obteniendo usuario:', error);
+        }
+        
+        return null;
+    }
+    
+    async markAsRead(chatId) {
+        if (!chatId || !this.currentUser) return;
+        
+        try {
+            // Resetear contador de no leídos
+            await firebaseApp.db.collection('chats').doc(chatId).update({
+                unreadCount: 0
+            });
+            
+            // Marcar mensajes como leídos
+            const messagesSnapshot = await firebaseApp.db.collection('chats')
+                .doc(chatId)
+                .collection('messages')
+                .where('read', '==', false)
+                .where('senderId', '!=', this.currentUser.uid)
+                .get();
+            
+            const batch = firebaseApp.db.batch();
+            messagesSnapshot.forEach(doc => {
+                batch.update(doc.ref, { read: true });
+            });
+            
+            await batch.commit();
+            
+        } catch (error) {
+            console.error('Error marcando como leído:', error);
+        }
+    }
+    
+    async logout() {
+        try {
+            // Actualizar estado a desconectado
+            if (this.currentUser) {
+                await firebaseApp.db.collection('users').doc(this.currentUser.uid).update({
+                    status: 'Desconectado',
+                    lastSeen: firebaseApp.timestamp()
+                });
+            }
+            
+            // Cerrar listeners
+            if (this.chatsListener) this.chatsListener();
+            if (this.messagesListener) this.messagesListener();
+            
+            // Cerrar sesión
+            await firebaseApp.auth.signOut();
+            
+            this.currentUser = null;
+            this.currentChat = null;
+            this.users.clear();
+            this.chats.clear();
+            
+            this.showToast('Sesión cerrada');
+            
+        } catch (error) {
+            console.error('Error cerrando sesión:', error);
+        }
+    }
+    
+    // Utilidades
+    formatTime(date) {
+        const now = new Date();
+        const diff = now - date;
+        
+        if (diff < 60000) return 'Ahora';
+        if (diff < 3600000) return `${Math.floor(diff / 60000)}min`;
+        if (diff < 86400000) return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        return date.toLocaleDateString();
+    }
+    
+    formatMessageText(text) {
+        // Convertir URLs en enlaces
+        const urlRegex = /(https?:\/\/[^\s]+)/g;
+        return text.replace(urlRegex, url => `<a href="${url}" target="_blank">${url}</a>`);
+    }
+    
+    scrollToBottom() {
+        const container = document.getElementById('messagesContainer');
+        container.scrollTop = container.scrollHeight;
+    }
+    
+    showToast(message) {
+        // Implementar toast notifications
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.textContent = message;
+        document.body.appendChild(toast);
+        
+        setTimeout(() => {
+            toast.remove();
+        }, 3000);
+    }
+    
+    showMessageNotification(message) {
+        // Mostrar notificación push
+        if (Notification.permission === 'granted') {
+            new Notification('Nuevo mensaje', {
+                body: message.content,
+                icon: '/icons/icon-192.png'
             });
         }
         
-        // Detectar si la app está instalada como PWA
-        if (window.matchMedia('(display-mode: standalone)').matches) {
-            console.log('Ejecutando como PWA instalada');
-        }
+        // Mostrar notificación en app
+        const notification = document.getElementById('notification');
+        document.getElementById('notificationMessage').textContent = message.content;
+        notification.classList.remove('hidden');
         
-        // Prevenir recarga al deslizar en iOS
-        document.addEventListener('touchmove', (e) => {
-            if (e.scale !== 1) {
-                e.preventDefault();
-            }
-        }, { passive: false });
+        setTimeout(() => {
+            notification.classList.add('hidden');
+        }, 5000);
     }
     
-    // Limpiar recursos cuando la app se cierre
-    cleanup() {
-        if (this.strobeInterval) clearInterval(this.strobeInterval);
-        if (this.sosInterval) clearTimeout(this.sosInterval);
-        if (this.currentStream) {
-            this.currentStream.getTracks().forEach(track => track.stop());
+    setupNotifications() {
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
         }
+    }
+    
+    searchChats(query) {
+        const chatItems = document.querySelectorAll('.chat-item');
+        const searchTerm = query.toLowerCase();
+        
+        chatItems.forEach(item => {
+            const chatName = item.querySelector('h4').textContent.toLowerCase();
+            const chatPreview = item.querySelector('.chat-preview').textContent.toLowerCase();
+            
+            if (chatName.includes(searchTerm) || chatPreview.includes(searchTerm)) {
+                item.style.display = 'flex';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+    
+    loadEmojis() {
+        // Podrías cargar un picker de emojis aquí
+        // Por simplicidad, usaremos emojis nativos
+    }
+    
+    showProfileModal() {
+        this.profileModal.classList.remove('hidden');
+        // Cargar datos actuales del perfil
     }
 }
 
-// Inicializar la app cuando se cargue el DOM
+// Inicializar la app
 document.addEventListener('DOMContentLoaded', () => {
-    window.flashlightApp = new FlashlightApp();
+    window.whatsAppChat = new WhatsAppChat();
 });
 
-// Manejar cuando la app se cierre
-window.addEventListener('beforeunload', () => {
-    if (window.flashlightApp) {
-        window.flashlightApp.cleanup();
-    }
-});
-
-// Detectar tecla de volumen para controlar linterna (solo en apps nativas)
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'VolumeUp' || e.key === 'VolumeDown') {
-        e.preventDefault();
-        if (window.flashlightApp) {
-            window.flashlightApp.toggleFlashlight();
-        }
-    }
-});
+// Service Worker para PWA
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+            .then(registration => {
+                console.log('Service Worker registrado:', registration.scope);
+            })
+            .catch(error => {
+                console.log('Error registrando Service Worker:', error);
+            });
+    });
+}

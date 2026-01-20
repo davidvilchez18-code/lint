@@ -4,270 +4,303 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#000000">
-    <title>Linterna Pro</title>
-    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#128C7E">
+    <title>WhatsChat - Mensajería Instantánea</title>
+    
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <link rel="stylesheet" href="styles.css">
     <link rel="manifest" href="manifest.json">
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            -webkit-tap-highlight-color: transparent;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #000;
-            color: white;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
-        
-        .flashlight-area {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            transition: background-color 0.3s;
-        }
-        
-        .flashlight-on {
-            background-color: white !important;
-        }
-        
-        .flashlight-off {
-            background-color: #000 !important;
-        }
-        
-        .torch-button {
-            width: 200px;
-            height: 200px;
-            border-radius: 50%;
-            background: linear-gradient(145deg, #2c2c2c, #1a1a1a);
-            border: none;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            cursor: pointer;
-            box-shadow: 
-                0 20px 40px rgba(0,0,0,0.5),
-                inset 0 -8px 16px rgba(0,0,0,0.8),
-                inset 0 8px 16px rgba(255,255,255,0.1);
-            position: relative;
-            transition: all 0.3s ease;
-            margin-bottom: 40px;
-        }
-        
-        .torch-button:active {
-            transform: scale(0.95);
-        }
-        
-        .torch-button.on {
-            background: linear-gradient(145deg, #fff8c4, #ffeb3b);
-            box-shadow: 
-                0 0 60px #ffeb3b,
-                0 0 100px rgba(255, 235, 59, 0.5),
-                inset 0 -8px 16px rgba(255, 200, 0, 0.8),
-                inset 0 8px 16px rgba(255, 255, 255, 0.8);
-        }
-        
-        .torch-icon {
-            font-size: 70px;
-            margin-bottom: 10px;
-            transition: all 0.3s;
-        }
-        
-        .torch-button.on .torch-icon {
-            color: #000;
-            text-shadow: 0 0 20px rgba(255, 255, 255, 0.8);
-        }
-        
-        .torch-button:not(.on) .torch-icon {
-            color: #666;
-        }
-        
-        .status-text {
-            font-size: 18px;
-            font-weight: 600;
-            letter-spacing: 1px;
-        }
-        
-        .controls {
-            padding: 20px;
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            background: rgba(0, 0, 0, 0.8);
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        
-        .control-button {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 50px;
-            background: rgba(255, 255, 255, 0.1);
-            color: white;
-            font-size: 16px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
-            backdrop-filter: blur(10px);
-            transition: all 0.3s;
-        }
-        
-        .control-button:active {
-            transform: scale(0.95);
-        }
-        
-        .control-button i {
-            font-size: 20px;
-        }
-        
-        .permission-alert {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.95);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            padding: 20px;
-            z-index: 1000;
-            text-align: center;
-        }
-        
-        .permission-alert.hidden {
-            display: none;
-        }
-        
-        .alert-content {
-            max-width: 300px;
-            background: #1a1a1a;
-            padding: 30px;
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.5);
-        }
-        
-        .alert-content h2 {
-            margin-bottom: 15px;
-            color: #ffeb3b;
-        }
-        
-        .alert-content p {
-            margin-bottom: 25px;
-            line-height: 1.5;
-            color: #ccc;
-        }
-        
-        .alert-button {
-            padding: 15px 30px;
-            background: #007AFF;
-            color: white;
-            border: none;
-            border-radius: 50px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            width: 100%;
-        }
-        
-        .sos-button {
-            position: absolute;
-            bottom: 20px;
-            right: 20px;
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            background: #ff3b30;
-            color: white;
-            border: none;
-            font-weight: bold;
-            cursor: pointer;
-            box-shadow: 0 5px 15px rgba(255, 59, 48, 0.4);
-        }
-        
-        .sos-active {
-            animation: sosBlink 1s infinite;
-        }
-        
-        @keyframes sosBlink {
-            0%, 100% { background: #ff3b30; }
-            50% { background: #000; }
-        }
-        
-        .battery-indicator {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 14px;
-            color: #888;
-        }
-        
-        @media (max-width: 768px) {
-            .torch-button {
-                width: 180px;
-                height: 180px;
-            }
-            
-            .torch-icon {
-                font-size: 60px;
-            }
-        }
-    </style>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
 </head>
 <body>
-    <div class="flashlight-area" id="flashlightArea">
-        <button class="torch-button" id="torchButton">
-            <div class="torch-icon">🔦</div>
-            <div class="status-text" id="statusText">APAGADO</div>
-        </button>
+    <!-- Pantalla de Autenticación -->
+    <div id="authScreen" class="screen active">
+        <div class="auth-container">
+            <div class="app-header">
+                <div class="logo">
+                    <i class="fab fa-whatsapp"></i>
+                    <h1>WhatsChat</h1>
+                </div>
+                <p class="subtitle">Mensajería en tiempo real</p>
+            </div>
+            
+            <div class="auth-form">
+                <div class="input-group">
+                    <i class="fas fa-user"></i>
+                    <input type="text" id="displayName" placeholder="Tu nombre" maxlength="20">
+                </div>
+                
+                <div class="input-group">
+                    <i class="fas fa-phone"></i>
+                    <input type="tel" id="phoneNumber" placeholder="Número de teléfono" pattern="[0-9]{10}">
+                </div>
+                
+                <div class="input-group">
+                    <i class="fas fa-camera"></i>
+                    <input type="file" id="profilePhoto" accept="image/*" style="display: none;">
+                    <button id="uploadPhotoBtn" class="photo-btn">
+                        <i class="fas fa-plus"></i> Foto de perfil
+                    </button>
+                    <div id="photoPreview"></div>
+                </div>
+                
+                <button id="signInBtn" class="btn-primary">
+                    <i class="fas fa-sign-in-alt"></i> Ingresar al Chat
+                </button>
+                
+                <div class="auth-footer">
+                    <p>Al registrarte, aceptas nuestros <a href="#">Términos y Privacidad</a></p>
+                </div>
+            </div>
+            
+            <div class="demo-users">
+                <h3>Usuarios de prueba:</h3>
+                <div class="demo-buttons">
+                    <button class="demo-btn" data-user="Ana">👩 Ana</button>
+                    <button class="demo-btn" data-user="Carlos">👨 Carlos</button>
+                    <button class="demo-btn" data-user="Maria">👩 María</button>
+                    <button class="demo-btn" data-user="Juan">👨 Juan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Pantalla Principal de Chat -->
+    <div id="chatScreen" class="screen">
+        <!-- Encabezado -->
+        <header class="chat-header">
+            <button class="back-btn" id="backBtn">
+                <i class="fas fa-arrow-left"></i>
+            </button>
+            
+            <div class="user-info">
+                <div class="user-avatar" id="userAvatar">
+                    <i class="fas fa-user"></i>
+                </div>
+                <div class="user-details">
+                    <h2 id="currentUserName">Usuario</h2>
+                    <p id="userStatus">En línea</p>
+                </div>
+            </div>
+            
+            <div class="header-actions">
+                <button class="header-btn" id="videoCallBtn">
+                    <i class="fas fa-video"></i>
+                </button>
+                <button class="header-btn" id="audioCallBtn">
+                    <i class="fas fa-phone"></i>
+                </button>
+                <button class="header-btn" id="menuBtn">
+                    <i class="fas fa-ellipsis-v"></i>
+                </button>
+            </div>
+        </header>
         
-        <div class="battery-indicator" id="batteryIndicator">
-            <i class="fas fa-battery-full"></i>
-            <span id="batteryLevel">--%</span>
+        <!-- Lista de Chats -->
+        <div class="chats-container" id="chatsList">
+            <div class="search-bar">
+                <i class="fas fa-search"></i>
+                <input type="text" id="searchChats" placeholder="Buscar chats...">
+            </div>
+            
+            <div class="chats-list" id="chatsContainer">
+                <!-- Los chats se cargarán aquí dinámicamente -->
+                <div class="no-chats" id="noChats">
+                    <i class="fas fa-comments"></i>
+                    <p>No hay chats activos</p>
+                    <button class="btn-secondary" id="startNewChatBtn">
+                        <i class="fas fa-plus"></i> Nuevo Chat
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Pantalla de Chat Individual -->
+        <div class="chat-container hidden" id="chatWindow">
+            <div class="chat-header">
+                <button class="back-btn" id="backToChatsBtn">
+                    <i class="fas fa-arrow-left"></i>
+                </button>
+                
+                <div class="chat-user-info">
+                    <div class="chat-user-avatar" id="chatUserAvatar">
+                        <i class="fas fa-user"></i>
+                    </div>
+                    <div class="chat-user-details">
+                        <h3 id="chatUserName">Contacto</h3>
+                        <p id="chatUserStatus">En línea</p>
+                    </div>
+                </div>
+                
+                <div class="chat-header-actions">
+                    <button class="header-btn" id="chatVideoCallBtn">
+                        <i class="fas fa-video"></i>
+                    </button>
+                    <button class="header-btn" id="chatAudioCallBtn">
+                        <i class="fas fa-phone"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Mensajes -->
+            <div class="messages-container" id="messagesContainer">
+                <div class="message-date">
+                    <span>HOY</span>
+                </div>
+                <!-- Los mensajes se cargarán aquí -->
+            </div>
+            
+            <!-- Input de Mensajes -->
+            <div class="message-input-container">
+                <button class="input-btn" id="attachBtn">
+                    <i class="fas fa-paperclip"></i>
+                </button>
+                
+                <button class="input-btn" id="emojiBtn">
+                    <i class="far fa-smile"></i>
+                </button>
+                
+                <div class="message-input">
+                    <input type="text" id="messageInput" placeholder="Escribe un mensaje..." autocomplete="off">
+                    <div class="input-actions">
+                        <button class="record-btn" id="recordBtn">
+                            <i class="fas fa-microphone"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <button class="send-btn" id="sendBtn">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+            
+            <!-- Modal para adjuntar archivos -->
+            <div class="attach-modal hidden" id="attachModal">
+                <div class="attach-options">
+                    <button class="attach-option" id="attachPhoto">
+                        <i class="fas fa-camera"></i>
+                        <span>Cámara</span>
+                    </button>
+                    <button class="attach-option" id="attachGallery">
+                        <i class="fas fa-images"></i>
+                        <span>Galería</span>
+                    </button>
+                    <button class="attach-option" id="attachDocument">
+                        <i class="fas fa-file"></i>
+                        <span>Documento</span>
+                    </button>
+                    <button class="attach-option" id="attachLocation">
+                        <i class="fas fa-map-marker-alt"></i>
+                        <span>Ubicación</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Modal Nuevo Chat -->
+        <div class="modal hidden" id="newChatModal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>Nuevo Chat</h3>
+                    <button class="close-btn" id="closeNewChatBtn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="search-users">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="searchUsers" placeholder="Buscar por nombre...">
+                    </div>
+                    <div class="users-list" id="usersList">
+                        <!-- Usuarios disponibles -->
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Modal Perfil -->
+        <div class="modal hidden" id="profileModal">
+            <div class="modal-content profile-modal">
+                <div class="modal-header">
+                    <h3>Mi Perfil</h3>
+                    <button class="close-btn" id="closeProfileBtn">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="profile-avatar-section">
+                        <div class="profile-avatar-large" id="profileAvatarLarge">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <button class="change-photo-btn" id="changePhotoBtn">
+                            <i class="fas fa-camera"></i> Cambiar foto
+                        </button>
+                    </div>
+                    
+                    <div class="profile-info">
+                        <div class="info-item">
+                            <label><i class="fas fa-user"></i> Nombre</label>
+                            <input type="text" id="profileName" value="Usuario">
+                        </div>
+                        
+                        <div class="info-item">
+                            <label><i class="fas fa-phone"></i> Teléfono</label>
+                            <input type="text" id="profilePhone" value="+1 234 567 8900">
+                        </div>
+                        
+                        <div class="info-item">
+                            <label><i class="fas fa-info-circle"></i> Estado</label>
+                            <input type="text" id="profileStatus" placeholder="¿Qué estás pensando?">
+                        </div>
+                    </div>
+                    
+                    <button class="btn-primary" id="saveProfileBtn">
+                        <i class="fas fa-save"></i> Guardar Cambios
+                    </button>
+                    
+                    <button class="btn-logout" id="logoutBtn">
+                        <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
     
-    <div class="controls">
-        <button class="control-button" id="strobeButton">
-            <i class="fas fa-bolt"></i>
-            <span>Strobe</span>
-        </button>
-        <button class="control-button" id="morseButton">
-            <i class="fas fa-code"></i>
-            <span>SOS</span>
-        </button>
-        <button class="control-button" id="brightnessButton">
-            <i class="fas fa-sun"></i>
-            <span>Brillo</span>
-        </button>
-    </div>
-    
-    <button class="sos-button" id="sosButton">SOS</button>
-    
-    <div class="permission-alert" id="permissionAlert">
-        <div class="alert-content">
-            <h2>🔄 Permiso Requerido</h2>
-            <p>Para usar la linterna, necesitamos acceso a la cámara de tu dispositivo.</p>
-            <p><strong>No grabaremos ni tomaremos fotos, solo controlaremos la linterna.</strong></p>
-            <button class="alert-button" id="requestPermissionBtn">Permitir Acceso</button>
+    <!-- Notificación de nuevo mensaje -->
+    <div class="notification hidden" id="notification">
+        <div class="notification-content">
+            <div class="notification-avatar" id="notificationAvatar">
+                <i class="fas fa-user"></i>
+            </div>
+            <div class="notification-info">
+                <h4 id="notificationName">Contacto</h4>
+                <p id="notificationMessage">Nuevo mensaje</p>
+            </div>
         </div>
     </div>
     
+    <!-- Grabación de audio -->
+    <div class="audio-recorder hidden" id="audioRecorder">
+        <div class="recorder-content">
+            <div class="recorder-wave"></div>
+            <p class="recorder-timer">0:00</p>
+            <div class="recorder-actions">
+                <button class="recorder-btn cancel" id="cancelRecording">
+                    <i class="fas fa-times"></i>
+                </button>
+                <button class="recorder-btn send" id="sendRecording">
+                    <i class="fas fa-check"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <script src="firebase-config.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

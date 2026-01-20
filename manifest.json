@@ -1,11 +1,11 @@
 {
-  "name": "Linterna Pro",
-  "short_name": "Linterna",
-  "description": "Linterna potente con funciones adicionales",
+  "name": "WhatsChat",
+  "short_name": "WhatsChat",
+  "description": "Aplicación de mensajería en tiempo real estilo WhatsApp",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#000000",
+  "background_color": "#128C7E",
+  "theme_color": "#128C7E",
   "orientation": "portrait",
   "icons": [
     {
@@ -49,15 +49,15 @@
       "type": "image/png"
     }
   ],
-  "categories": ["utilities", "productivity"],
-  "prefer_related_applications": false,
+  "categories": ["social", "communication"],
   "shortcuts": [
     {
-      "name": "Encender Linterna",
-      "short_name": "Encender",
-      "description": "Enciende la linterna rápidamente",
-      "url": "/?action=on",
-      "icons": [{ "src": "icons/shortcut-icon.png", "sizes": "96x96" }]
+      "name": "Nuevo Chat",
+      "short_name": "Nuevo",
+      "description": "Iniciar un nuevo chat",
+      "url": "/?action=new-chat",
+      "icons": [{ "src": "icons/shortcut-chat.png", "sizes": "96x96" }]
     }
-  ]
+  ],
+  "prefer_related_applications": false
 }
