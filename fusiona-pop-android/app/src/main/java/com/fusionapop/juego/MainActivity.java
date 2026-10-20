@@ -52,7 +52,7 @@ public final class MainActivity extends Activity {
  }
  @Override @SuppressWarnings("deprecation") public void onBackPressed(){
   new AlertDialog.Builder(this).setTitle("¿Salir de Fusiona Pop?")
-  .setMessage("Tu partida actual no se guarda al salir. Tu récord sí permanece.")
+  .setMessage("Tu nivel y tu partida se guardan automáticamente en este dispositivo.")
   .setNegativeButton("Seguir jugando",(dialog,which)->dialog.dismiss())
   .setPositiveButton("Salir",(dialog,which)->finish()).show();
  }
